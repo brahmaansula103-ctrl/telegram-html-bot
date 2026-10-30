@@ -1,3 +1,4 @@
+
 import os
 import re
 import asyncio
@@ -25,7 +26,6 @@ def deep_clone_site(url):
         r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
         html_content = r.text
-        # Simple obfuscate - make it downloadable
         filename = "Zaoliya_HTML.html"
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(html_content)
@@ -36,44 +36,45 @@ def deep_clone_site(url):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome to URL to HTML Bot!\n\n"
-        "🔗 Send me any Website URL\n"
-        "📄 I will give you HTML file instantly!\n\n"
-        "Example: https://google.com"
+        "👋 Welcome! Send any Website URL and I will give you HTML file!\n\nExample: https://google.com"
     )
 
 async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if not re.match(r'^https?://', text):
-        await update.message.reply_text("❌ Please send a valid URL starting with http:// or https://\nExample: https://example.com")
+        await update.message.reply_text("❌ Send valid URL like https://example.com")
         return
-    
-    await update.message.reply_text("⏳ Downloading HTML... Please wait 5-10 sec")
-    
+    await update.message.reply_text("⏳ Downloading HTML... wait 5 sec")
     loop = asyncio.get_event_loop()
     file_path = await loop.run_in_executor(None, deep_clone_site, text)
-    
     if file_path and os.path.exists(file_path):
         await update.message.reply_document(
             document=open(file_path, 'rb'),
             filename=os.path.basename(file_path),
-            caption=f"✅ HTML DONE!\n🔗 URL: {text}"
+            caption=f"✅ HTML DONE! URL: {text}"
         )
         try:
             os.remove(file_path)
         except:
             pass
     else:
-        await update.message.reply_text("❌ Failed to get HTML. Try another URL or check if site blocks bot.")
+        await update.message.reply_text("❌ Failed! Try another URL")
 
 def main():
-    print("@XCT_Zaoliya Running - Direct URL to HTML Mode - No Channel Check")
+    # FIX FOR RENDER - Create event loop for MainThread
+    try:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    except:
+        pass
+    
+    print("Zaoliya Running - Direct URL to HTML - Fixed Event Loop")
+    
+    # Start Flask in background thread
+    threading.Thread(target=run_flask, daemon=True).start()
+    
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
-    
-    # Run Flask in thread for Render health check
-    threading.Thread(target=run_flask, daemon=True).start()
     
     print("Bot polling started...")
     app.run_polling()
