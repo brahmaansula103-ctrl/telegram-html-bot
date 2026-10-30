@@ -1,113 +1,82 @@
-import os, random, json, threading, requests, asyncio
+import os
+import re
+import asyncio
+import threading
+import requests
 from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-BRAND = "@XCT_Zaoliya"
-FILE_NAME = "Zaoliya_Bodo.html"
-INVITE_LINK = "https://t.me/+ac6ZAZQH0uI3NDI1"
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8964154107:AAHy0AD0pA9LwRwlmi3zDaBzq9G18xeUAYc")
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003852203400"))
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8964154107:AAG_J2KXOY4v4wNvWPMev7hcy8K0zaGdBrk")
 
-app_flask = Flask('')
+app_flask = Flask(__name__)
+
 @app_flask.route('/')
-def home(): return f"{BRAND} Bot is Alive! 24x7 ON - Live"
+def home():
+    return "URL to HTML Bot 24x7 - Direct Mode - Running!"
+
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app_flask.run(host='0.0.0.0', port=port)
 
-PASS_FILE = "passwords.json"
-def load_db():
-    if os.path.exists(PASS_FILE):
-        try: return json.load(open(PASS_FILE))
-        except: return {}
-    return {}
-def save_db(d): json.dump(d, open(PASS_FILE, "w"))
-passwords_db = load_db()
-user_state = {}
-
-async def check_joined(bot, user_id):
+def deep_clone_site(url):
     try:
-        m = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        return m.status in ['member','administrator','creator']
-    except: return False
-
-def fetch_with_bypass(url):
-    headers = {"User-Agent": "Mozilla/5.0 Chrome/120.0.0.0"}
-    try:
-        r = requests.get(url, headers=headers, timeout=20, verify=False)
-        if r.status_code == 200 and len(r.text) > 300: return r.text
-    except: pass
-    try:
-        proxy = f"https://api.allorigins.win/raw?url={url}"
-        r = requests.get(proxy, timeout=20)
-        if r.status_code == 200: return r.text
-    except: pass
-    return "<h1>Content via Proxy</h1>"
-
-def deep_clone_site(start_url):
-    html_text = fetch_with_bypass(start_url)
-    final = f"<!DOCTYPE html><html><head><meta charset='UTF-8'><base href='{start_url}'><title>{BRAND}</title></head><body><h2>{BRAND}</h2>{html_text}</body></html>"
-    with open(FILE_NAME, "w", encoding="utf-8") as f: f.write(final)
-    return FILE_NAME
-
-URL_ASK_MSG = "Send a Website URL to start! Example: https://example.com"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=15)
+        r.raise_for_status()
+        html_content = r.text
+        # Simple obfuscate - make it downloadable
+        filename = "Zaoliya_HTML.html"
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        return filename
+    except Exception as e:
+        print(f"Clone error: {e}")
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if await check_joined(context.bot, uid):
-        uid_s = str(uid)
-        if uid_s not in passwords_db:
-            passwords_db[uid_s] = f"BODO-{random.randint(1000,9999)}"; save_db(passwords_db)
-        user_state[uid] = {"joined": True, "code_verified": False}
-        await update.message.reply_text(f"✅ JOIN SUCCESS! Code: `{passwords_db[uid_s]}`", parse_mode="Markdown")
+    await update.message.reply_text(
+        "👋 Welcome to URL to HTML Bot!\n\n"
+        "🔗 Send me any Website URL\n"
+        "📄 I will give you HTML file instantly!\n\n"
+        "Example: https://google.com"
+    )
+
+async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    if not re.match(r'^https?://', text):
+        await update.message.reply_text("❌ Please send a valid URL starting with http:// or https://\nExample: https://example.com")
+        return
+    
+    await update.message.reply_text("⏳ Downloading HTML... Please wait 5-10 sec")
+    
+    loop = asyncio.get_event_loop()
+    file_path = await loop.run_in_executor(None, deep_clone_site, text)
+    
+    if file_path and os.path.exists(file_path):
+        await update.message.reply_document(
+            document=open(file_path, 'rb'),
+            filename=os.path.basename(file_path),
+            caption=f"✅ HTML DONE!\n🔗 URL: {text}"
+        )
+        try:
+            os.remove(file_path)
+        except:
+            pass
     else:
-        kb = [[InlineKeyboardButton("🔗 Join Channel", url=INVITE_LINK)], [InlineKeyboardButton("✅ Verify", callback_data="check_join")]]
-        await update.message.reply_text(f"Join: {INVITE_LINK}", reply_markup=InlineKeyboardMarkup(kb))
-
-async def button_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query; await q.answer()
-    uid = q.from_user.id; uid_s = str(uid)
-    if await check_joined(context.bot, uid):
-        if uid_s not in passwords_db:
-            passwords_db[uid_s] = f"BODO-{random.randint(1000,9999)}"; save_db(passwords_db)
-        user_state[uid] = {"joined": True, "code_verified": False}
-        await q.edit_message_text(f"✅ Code: `{passwords_db[uid_s]}`", parse_mode="Markdown")
-    else: await q.answer("Join nahi kiya!", show_alert=True)
-
-async def handle_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id; uid_s = str(uid); text = update.message.text.strip()
-    if not await check_joined(context.bot, uid):
-        kb = [[InlineKeyboardButton("🔗 Join", url=INVITE_LINK)], [InlineKeyboardButton("✅ Verify", callback_data="check_join")]]
-        await update.message.reply_text(f"Join: {INVITE_LINK}", reply_markup=InlineKeyboardMarkup(kb)); return
-    if not user_state.get(uid, {}).get("code_verified", False):
-        if uid_s in passwords_db and text == passwords_db[uid_s]:
-            user_state[uid] = {"joined": True, "code_verified": True}
-            await update.message.reply_text(URL_ASK_MSG); return
-        else:
-            if uid_s not in passwords_db:
-                passwords_db[uid_s] = f"BODO-{random.randint(1000,9999)}"; save_db(passwords_db)
-            await update.message.reply_text(f"Galat Code! Sahi: `{passwords_db[uid_s]}`", parse_mode="Markdown"); return
-    url = text
-    if not url.startswith("http"): url = "https://" + url
-    msg = await update.message.reply_text(f"⏳ Fetching {url}")
-    file_path = deep_clone_site(url)
-    size_kb = os.path.getsize(file_path) / 1024
-    caption = f"✅ HTML DONE! File: {FILE_NAME} Size: {size_kb:.1f} KB By: {BRAND} JOIN: {INVITE_LINK}"
-    await update.message.reply_document(document=open(file_path, "rb"), filename=FILE_NAME, caption=caption)
-    await msg.delete()
+        await update.message.reply_text("❌ Failed to get HTML. Try another URL or check if site blocks bot.")
 
 def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    # FIX FOR Render Python 3.13 - event loop error
-    try:
-        asyncio.set_event_loop(asyncio.new_event_loop())
-    except: pass
+    print("@XCT_Zaoliya Running - Direct URL to HTML Mode - No Channel Check")
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_check, pattern="check_join"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all))
-    print(f"{BRAND} Running - Fixed event loop")
-    app.run_polling(drop_pending_updates=True)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
+    
+    # Run Flask in thread for Render health check
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    print("Bot polling started...")
+    app.run_polling()
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    main()
