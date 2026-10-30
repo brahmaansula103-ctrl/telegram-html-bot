@@ -16,7 +16,7 @@ CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003852203400"))
 app_flask = Flask('')
 @app_flask.route('/')
 def home(): return f"{BRAND} Bot is Alive! 24x7 ON"
-def run_flask(): app_flask.run(host='0.0.0.0', port=8080)
+def run_flask(): app_flask.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 PASS_FILE = "passwords.json"
 def load_db():
